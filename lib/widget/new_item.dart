@@ -1,11 +1,13 @@
-
 // ignore_for_file: unnecessary_import
+
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 import 'package:shopping_list/data/categories.dart';
 import 'package:shopping_list/models/category.dart';
 import 'package:shopping_list/models/grocery_item.dart';
+import 'package:http/http.dart' as http;
 
 class NewItem extends StatefulWidget {
   const NewItem({super.key});
@@ -15,18 +17,42 @@ class NewItem extends StatefulWidget {
 }
 
 class _NewItemState extends State<NewItem> {
-
   final _fromKey = GlobalKey<FormState>();
   var _enteredName = '';
   var _enteredQuality = 1;
   var _selectedCategory = categories[Categories.vegetables];
+  var _isSending = false;
 
-  void _saveItem(){
-    if(_fromKey.currentState!.validate()){
+  void _saveItem() async {
+    if (_fromKey.currentState!.validate()) {
       _fromKey.currentState!.save();
-      Navigator.of(context).pop(
-        GroceryItem(id: DateTime.now().toString(), name: _enteredName, quantity: _enteredQuality, category: _selectedCategory!)
+      setState(() {
+        _isSending = true;
+      });
+      final url = Uri.https(
+          'shopping-list-d5e12-default-rtdb.asia-southeast1.firebasedatabase.app',
+          'shopping-list.json');
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode(
+          {
+            'name': _enteredName,
+            'quantity': _enteredQuality,
+            'category': _selectedCategory!.name
+          },
+        ),
       );
+
+      final Map<String, dynamic> redData = json.decode(response.body);
+      if (!context.mounted) {
+        return;
+      }
+      Navigator.of(context).pop(GroceryItem(
+          id: redData['name'],
+          name: _enteredName,
+          quantity: _enteredQuality,
+          category: _selectedCategory!));
     }
   }
 
@@ -56,7 +82,7 @@ class _NewItemState extends State<NewItem> {
                   return null;
                 },
                 onSaved: (value) {
-                  _enteredName  = value!;
+                  _enteredName = value!;
                 },
               ),
               Row(
@@ -65,7 +91,8 @@ class _NewItemState extends State<NewItem> {
                   Expanded(
                     child: TextFormField(
                       initialValue: _enteredQuality.toString(),
-                      decoration: const InputDecoration(label: Text('Quantitiy')),
+                      decoration:
+                          const InputDecoration(label: Text('Quantitiy')),
                       keyboardType: TextInputType.number,
                       validator: (value) {
                         if (value == null ||
@@ -76,44 +103,44 @@ class _NewItemState extends State<NewItem> {
                         }
                         return null;
                       },
-                      onSaved: (value){
+                      onSaved: (value) {
                         _enteredQuality = int.parse(value!);
                       },
                     ),
-
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: DropdownButtonFormField(
-                      value: _selectedCategory,
-                      validator: (value) {
-                        if(value == null){
-                          return 'Harus Pilih Kategori';
-                        }
-                        return null;
-                      },
-                      items: [
-                      for (final category in categories.entries)
-                        DropdownMenuItem(
-                          value: category.value,
-                            child: Row(
-                          children: [
-                            Container(
-                              width: 16,
-                              height: 16,
-                              color: category.value.color,
-                            ),
-                            const SizedBox(
-                              width: 6,
-                            ),
-                            Text(category.value.name)
-                          ],
-                        ))
-                    ], onChanged: (value) {
-                      setState(() {
-                        _selectedCategory  = value;
-                      });
-                    }),
+                        value: _selectedCategory,
+                        validator: (value) {
+                          if (value == null) {
+                            return 'Harus Pilih Kategori';
+                          }
+                          return null;
+                        },
+                        items: [
+                          for (final category in categories.entries)
+                            DropdownMenuItem(
+                                value: category.value,
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 16,
+                                      height: 16,
+                                      color: category.value.color,
+                                    ),
+                                    const SizedBox(
+                                      width: 6,
+                                    ),
+                                    Text(category.value.name)
+                                  ],
+                                ))
+                        ],
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedCategory = value;
+                          });
+                        }),
                   )
                 ],
               ),
@@ -123,12 +150,22 @@ class _NewItemState extends State<NewItem> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  TextButton(onPressed: () {
-                    _fromKey.currentState!.reset();
-                  }, child: const Text('Reset')),
-                  ElevatedButton(onPressed: () {
-                    _saveItem();
-                  }, child: const Text('Add Item'))
+                  TextButton(
+                      onPressed: () {
+                        _isSending ? null : _fromKey.currentState!.reset();
+                      },
+                      child: const Text('Reset')),
+                  ElevatedButton(
+                      onPressed: () {
+                        _isSending
+                            ? const SizedBox(
+                                height: 16,
+                                width: 16,
+                                child: CircularProgressIndicator(),
+                              )
+                            : _saveItem();
+                      },
+                      child: const Text('Add Item'))
                 ],
               )
             ],
